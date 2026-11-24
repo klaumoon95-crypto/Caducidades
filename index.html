@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caducidades</title>
+<meta name="theme-color" content="#16281d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: practical shop tool for a herbolario, quick to use behind the counter.
+   IDEA: the shelf-check list — every lot with its dates, most urgent first.
+   PICTURE: the scanner window, and the four status counters on the home tab.
+   COLOUR and TYPE: pale sage ground, deep herb-green ink; status colours red/orange/amber/green; Archivo + Inter.
+   LAYOUT: tab bar at the bottom, one column on phones, big scan button. */
+:root{color-scheme:light dark;--bg:light-dark(#eef3ec,#0f1c14);--ink:light-dark(#16281d,#e3eee5);--card:light-dark(#ffffff,#18301f);--line:light-dark(#d3e0d4,#2a4532);--mute:light-dark(#57705e,#9db9a5);--cad:light-dark(#c8102e,#ff6b7d);--urg:light-dark(#d06200,#ffa64d);--pro:light-dark(#9a7a00,#e8c547);--ok:light-dark(#2f7d47,#6fd08f)}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter,system-ui,sans-serif;overflow-x:clip}
+h1,h2,.num{font-family:Archivo,Inter,sans-serif;font-stretch:112%}
+h1{font-size:21px;margin:0;font-weight:800}
+h2{font-size:21px;margin:0 0 12px;font-weight:800}
+.wrap{max-width:900px;margin:0 auto;padding:14px max(4vw,14px) 110px}
+.card{background:var(--card);border-radius:20px;padding:clamp(16px,3vw,26px);margin-bottom:14px}
+.small{font-size:13px;color:var(--mute)}
+button{font:600 15px Inter,sans-serif;min-height:44px;padding:0 16px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--urg);outline-offset:2px}
+button.pri{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button.ghost{background:transparent;border-color:transparent;color:var(--mute);padding:0 10px}
+button.danger{color:var(--cad)}
+input,select,textarea{font:16px Inter,sans-serif;min-height:44px;width:100%;padding:8px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+label{font-size:13px;font-weight:600;color:var(--mute);display:grid;gap:4px}
+.row2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.form{display:grid;gap:12px}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+.head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.counts button{display:grid;align-content:start;justify-items:start;gap:2px;padding:12px;min-height:88px;text-align:left;border:0;background:var(--bg);border-top:5px solid var(--c);border-radius:14px}
+.counts button[aria-pressed=true]{outline:2px solid var(--c)}
+.counts strong{font:800 clamp(26px,7vw,40px)/1 Archivo,sans-serif;font-stretch:112%;color:var(--c)}
+.counts span{font-size:13px;color:var(--mute);font-weight:600}
+.bigscan{width:100%;min-height:64px;font-size:18px;margin-top:14px}
+.lote{display:grid;grid-template-columns:6px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.lote:last-child{border:0}
+.lote .s{align-self:stretch;border-radius:3px;background:var(--c)}
+.lote .n{background:none;border:0;padding:0;text-align:left;font:inherit;color:inherit;min-height:44px;display:grid;align-content:center}
+.lote .n b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st{font-weight:700;color:var(--c);white-space:nowrap}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.tools input{flex:1 1 200px;width:auto}
+.empty{color:var(--mute);padding:14px 0}
+.cam{position:relative;background:#000;border-radius:16px;overflow:hidden;aspect-ratio:4/3;display:grid;place-items:center;color:#fff}
+.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cam .aim{position:absolute;left:12%;right:12%;top:35%;bottom:35%;border:3px solid #fff;border-radius:12px;box-shadow:0 0 0 999px #0006;pointer-events:none}
+.cam .aim::after{content:"";position:absolute;left:6%;right:6%;top:50%;height:2px;background:var(--cad);animation:scan 1.6s ease-in-out infinite alternate}
+@keyframes scan{from{transform:translateY(-30px)}to{transform:translateY(30px)}}
+.cam .msg{position:relative;padding:20px;text-align:center;max-width:30ch}
+.quick{display:flex;gap:6px;flex-wrap:wrap}
+.quick button{min-height:38px;padding:0 12px;font-size:14px}
+.prod{display:grid;gap:4px;margin-bottom:10px}
+.prod .code{font:500 13px ui-monospace,monospace;color:var(--mute)}
+.dates{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:6px 0}
+.dates div{background:var(--bg);border-radius:10px;padding:6px 10px}
+.dates span{display:block;font-size:12px;color:var(--mute)}
+.dates strong{font-size:15px;white-space:nowrap}
+.cal{display:inline-flex;align-items:center;min-height:44px;padding:0 10px;color:var(--ok);font-weight:600;font-size:15px}
+.lot2{border:1px solid var(--line);border-left:6px solid var(--c);border-radius:14px;padding:10px 12px;margin-bottom:10px}
+.tabs{position:fixed;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(3,1fr);background:var(--card);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom));z-index:5}
+.tabs button{border:0;background:transparent;min-height:50px;color:var(--mute)}
+.tabs button[aria-current=page]{color:var(--ink);background:var(--bg)}
+[data-sec]{display:none}[data-sec].on{display:block}
+.panel{display:none;gap:10px;padding:14px;border-radius:14px;background:var(--bg);margin-top:12px}.panel.on{display:grid}
+#toast{position:fixed;left:50%;bottom:84px;transform:translate(-50%,200px);background:var(--ink);color:var(--bg);padding:8px 8px 8px 18px;border-radius:14px;display:flex;gap:10px;align-items:center;transition:transform .25s;max-width:calc(100% - 24px);z-index:9}
+#toast.on{transform:translate(-50%,0)}
+#toast button{background:transparent;color:var(--bg);border:0;text-decoration:underline}
+@media(max-width:560px){.counts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- CADUCIDADES -->
+  <div data-sec="lista">
+    <div class="head"><h1 id="biz">Caducidades</h1><span class="small" id="today"></span></div>
+    <section class="card">
+      <div class="counts" id="counts"></div>
+      <button class="pri bigscan" data-go="escanear">Escanear producto</button>
+    </section>
+    <section class="card">
+      <div class="head" style="margin-bottom:6px"><h2 style="margin:0" id="ltitle">Próximas caducidades</h2></div>
+      <div class="tools"><input id="q" type="search" placeholder="Buscar producto, código o lote" aria-label="Buscar"></div>
+      <div id="list"></div>
+    </section>
+  </div>
+
+  <!-- ESCANEAR -->
+  <div data-sec="escanear">
+    <section class="card">
+      <h2>Escanear</h2>
+      <div class="cam" id="cam"><video id="video" playsinline muted hidden></video><div class="aim" id="aim" hidden></div><div class="msg" id="cammsg">Apunta al código de barras del producto.</div></div>
+      <div class="btns" style="margin-top:10px"><button class="pri" id="camBtn" style="flex:1">Abrir cámara</button><button id="torch" hidden>Linterna</button></div>
+      <form class="tools" id="manual" style="margin-top:12px"><input id="mcode" inputmode="numeric" placeholder="…o escribe el código" aria-label="Código de barras"><button type="submit">Buscar</button></form>
+      <button class="ghost" id="nocode" style="padding:0">Añadir producto sin código (granel)</button>
+    </section>
+
+    <section class="card" id="result" hidden>
+      <div class="prod"><span class="code" id="rcode"></span><label>Nombre del producto<input id="rname" maxlength="80" placeholder="Ej.: Infusión de manzanilla 20 bolsitas"></label><span class="small" id="rlook"></span></div>
+      <div id="rlots"></div>
+      <h2 style="margin-top:16px" id="ftitle">Añadir lote</h2>
+      <form class="form" id="form">
+        <div class="row2">
+          <label>Fecha de compra<input id="fb" type="date" required></label>
+          <label>Caducidad<input id="fe" type="date" required></label>
+        </div>
+        <div class="quick" id="quick"><button type="button" data-m="1">+1 mes</button><button type="button" data-m="3">+3 meses</button><button type="button" data-m="6">+6 meses</button><button type="button" data-m="12">+1 año</button><button type="button" data-m="24">+2 años</button></div>
+        <div class="row2">
+          <label>Cantidad<input id="fq" type="number" min="1" inputmode="numeric" value="1"></label>
+          <label>Lote (opcional)<input id="fl" maxlength="30"></label>
+        </div>
+        <label>Nota (opcional)<input id="fn" maxlength="80" placeholder="Ej.: estantería 3, proveedor…"></label>
+        <div class="btns"><button class="pri" type="submit" id="fsub" style="flex:1">Guardar lote</button><button type="button" id="fcancel" hidden>Cancelar</button></div>
+      </form>
+      <button class="sec bigscan" id="again" style="margin-top:12px">Escanear otro producto</button>
+    </section>
+  </div>
+
+  <!-- AJUSTES -->
+  <div data-sec="ajustes">
+    <section class="card">
+      <h2>Ajustes</h2>
+      <div class="form">
+        <label>Nombre del negocio<input id="sbiz" maxlength="40" placeholder="Ej.: Herbolario La Salvia"></label>
+        <div class="row2">
+          <label>Urgente si caduca en (días)<input id="swarn" type="number" min="1" max="90" inputmode="numeric"></label>
+          <label>Aviso si caduca en (días)<input id="ssoon" type="number" min="2" max="365" inputmode="numeric"></label>
+        </div>
+        <p class="small" style="margin:0">Por defecto: urgente a 7 días y aviso a 60 días (2 meses).</p>
+        <div><button class="pri" id="ssave">Guardar ajustes</button></div>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Copia de seguridad</h2>
+      <p class="small" id="baklast" style="margin-top:-6px"></p>
+      <div class="btns"><button class="pri" id="bak">Descargar copia</button><button id="resbtn">Restaurar copia</button><button id="csv">Descargar lista (CSV)</button></div>
+      <div class="panel" id="respanel">
+        <label>Elige el archivo de la copia (.json)<input type="file" id="resfile" accept=".json,application/json"></label>
+        <div><button class="pri" id="resok">Restaurar (sustituye los datos actuales)</button></div>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Historial</h2>
+      <p class="small" style="margin-top:-6px">Lotes marcados como vendidos o retirados en los últimos 90 días.</p>
+      <div id="hist"></div>
+    </section>
+    <section class="card">
+      <h2>Otros</h2>
+      <div class="btns"><button id="sample">Cargar datos de ejemplo</button><button class="danger" id="wipe">Borrar todos los datos</button></div>
+    </section>
+  </div>
+</div>
+
+<nav class="tabs" aria-label="Secciones"><button data-tab="lista">Caducidades</button><button data-tab="escanear">Escanear</button><button data-tab="ajustes">Ajustes</button></nav>
+<div id="toast" role="status"><span id="tmsg"></span><button id="tbtn" hidden>Deshacer</button></div>
+<canvas id="cv" hidden></canvas>
+
+<script>
+{
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const dnum=s=>{const[y,m,d]=s.split('-').map(Number);return Date.UTC(y,m-1,d)/864e5};
+const today=()=>iso(new Date());
+const left=exp=>dnum(exp)-dnum(today());
+const fnum=s=>s?new Date(s+'T12:00').toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';
+const fdate=s=>s?new Date(s+'T12:00').toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'}):'—';
+const addMonths=(s,m)=>{const[y,mo,d]=s.split('-').map(Number);const t=new Date(y,mo-1+m,1);t.setDate(Math.min(d,new Date(t.getFullYear(),t.getMonth()+1,0).getDate()));return iso(t)};
+const key=c=>{c=String(c||'').trim();return /^\d+$/.test(c)?c.replace(/^0+/,''):c};
+
+const LS='caducidades-v1',BK='caducidades-ultima-copia';
+const items=new Map();
+const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+function load(){try{const o=JSON.parse(lsGet(LS)||'{}');for(const k in o)items.set(k,o[k])}catch(e){}}
+function save(){lsSet(LS,JSON.stringify(Object.fromEntries(items)))}
+function put(id,v,quiet){items.set(id,v);save();if(!quiet)render()}
+function del(id){items.delete(id);save();render()}
+const all=k=>[...items].filter(([,v])=>v&&v.k===k).map(([id,v])=>({id,...v}));
+const cfg=()=>({warn:7,soon:60,biz:'',...(items.get('cfg')||{}),k:'cfg'});
+const prods=()=>all('p');
+const lots=()=>all('l');
+const active=()=>lots().filter(l=>!l.out);
+const prodByCode=c=>{const k=key(c);return k?prods().find(p=>key(p.code)===k):null};
+
+const ST={cad:['Caducados','var(--cad)'],urg:['Urgente','var(--urg)'],pro:['Pronto','var(--pro)'],ok:['Bien','var(--ok)']};
+function status(l){const d=left(l.exp),c=cfg();return d<0?'cad':d<=c.warn?'urg':d<=c.soon?'pro':'ok'}
+function leftTxt(exp){const d=left(exp);return d<-1?`Caducó hace ${-d} días`:d===-1?'Caducó ayer':d===0?'Caduca hoy':d===1?'Caduca mañana':d<60?`Quedan ${d} días`:`Quedan ${Math.round(d/30.4)} meses`}
+
+let toastT=null,undo=null,filt='',editing=null,cur=null,wipeArm=false;
+function toast(msg,fn){$('#tmsg').textContent=msg;undo=fn||null;$('#tbtn').hidden=!fn;$('#toast').classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>$('#toast').classList.remove('on'),5000)}
+$('#tbtn').onclick=()=>{if(undo)undo();undo=null;$('#toast').classList.remove('on')};
+function download(name,text,mime){const u=URL.createObjectURL(new Blob([text],{type:mime}));const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),3000)}
+
+// ---------- Lista ----------
+function renderList(){
+  const c=cfg();
+  $('#biz').textContent=c.biz||'Caducidades';
+  $('#today').textContent=new Date().toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'});
+  const act=active(),n={cad:0,urg:0,pro:0,ok:0};for(const l of act)n[status(l)]++;
+  const per=d=>d%30===0&&d>=60?`${d/30} meses`:d===30?'1 mes':`${d} días`;
+  const sub={cad:'ya caducados',urg:`en ${per(c.warn)} o menos`,pro:`en ${per(c.soon)} o menos`,ok:'más adelante'};
+  $('#counts').innerHTML=Object.keys(ST).map(s=>`<button data-f="${s}" aria-pressed="${filt===s}" style="--c:${ST[s][1]}"><strong>${n[s]}</strong><span>${ST[s][0]}</span><span style="font-weight:400">${sub[s]}</span></button>`).join('');
+  $('#ltitle').textContent=filt?ST[filt][0]:'Próximas caducidades';
+  const q=$('#q').value.trim().toLowerCase();
+  const xs=act.filter(l=>(!filt||status(l)===filt)&&(!q||(l.name||'').toLowerCase().includes(q)||String(l.code||'').includes(q)||(l.lot||'').toLowerCase().includes(q))).sort((a,b)=>a.exp.localeCompare(b.exp));
+  $('#list').innerHTML=xs.length?xs.map(l=>{const s=status(l);return `<div class="lote" style="--c:${ST[s][1]}"><div class="s"></div><button class="n" data-open="${esc(l.id)}"><b>${esc(l.name)}</b><span class="small">${l.qty>1?l.qty+' uds · ':''}Caduca ${fdate(l.exp)}${l.lot?' · lote '+esc(l.lot):''}</span></button><span class="st">${leftTxt(l.exp)}</span></div>`}).join('')
+    :`<div class="empty">${act.length?'Nada que mostrar con este filtro.':'Aún no hay productos. Pulsa «Escanear producto» para añadir el primero, o carga los datos de ejemplo en Ajustes.'}</div>`;
+}
+$('#counts').onclick=e=>{const b=e.target.closest('[data-f]');if(!b)return;filt=filt===b.dataset.f?'':b.dataset.f;renderList()};
+$('#q').oninput=renderList;
+$('#list').onclick=e=>{const b=e.target.closest('[data-open]');if(!b)return;const l=items.get(b.dataset.open);openProduct({pid:l.pid,code:l.code});showTab('escanear',true)};
+
+// ---------- Producto ----------
+function openProduct({pid,code,gs1}){
+  stopCam();
+  const p=pid?items.get(pid)&&{id:pid,...items.get(pid)}:prodByCode(code);
+  cur={pid:p?p.id:null,code:p?p.code:(code||''),name:p?p.name:''};
+  $('#result').hidden=false;
+  $('#rcode').textContent=cur.code?'Código '+cur.code:'Producto sin código';
+  $('#rname').value=cur.name;$('#rlook').textContent='';
+  endEdit();
+  if(gs1){if(gs1.exp||gs1.best)$('#fe').value=gs1.exp||gs1.best;if(gs1.lot)$('#fl').value=gs1.lot}
+  renderLots();
+  if(!p&&/^\d{8,14}$/.test(cur.code)&&navigator.onLine)lookup(cur.code);
+  setTimeout(()=>{$('#result').scrollIntoView({behavior:'smooth',block:'start'});if(!cur.name)$('#rname').focus({preventScroll:true})},60);
+}
+async function lookup(code){
+  $('#rlook').textContent='Buscando el nombre en Open Food Facts…';
+  try{
+    const ctl=new AbortController();setTimeout(()=>ctl.abort(),5000);
+    const r=await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,product_name_es,brands,quantity`,{signal:ctl.signal});
+    const j=await r.json(),p=j&&j.product;
+    const nm=p&&(p.product_name_es||p.product_name);
+    if(nm&&cur&&cur.code===code&&!$('#rname').value.trim()){$('#rname').value=[nm,p.brands&&p.brands.split(',')[0],p.quantity].filter(Boolean).join(' · ').slice(0,80);$('#rlook').textContent='Nombre encontrado. Revísalo si hace falta.'}
+    else if(cur&&cur.code===code)$('#rlook').textContent='No lo he encontrado: escribe el nombre una vez y quedará guardado.';
+  }catch(e){if(cur&&cur.code===code)$('#rlook').textContent='Escribe el nombre una vez y quedará guardado.'}
+}
+function calUrl(l){
+  const c=cfg(),t=dnum(today()),wd=Math.max(t,dnum(l.exp)-c.soon),ymd=n=>new Date(n*864e5).toISOString().slice(0,10).replace(/-/g,'');
+  const txt=`Revisar caducidad: ${l.name}`,det=`Caduca el ${fdate(l.exp)}.${l.lot?' Lote '+l.lot+'.':''} ${l.qty} ${l.qty===1?'unidad':'unidades'}.`;
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(txt)+'&dates='+ymd(wd)+'/'+ymd(wd+1)+'&details='+encodeURIComponent(det);
+}
+function renderLots(){
+  if(!cur)return;
+  const ls=active().filter(l=>cur.pid?l.pid===cur.pid:false).sort((a,b)=>a.exp.localeCompare(b.exp));
+  $('#rlots').innerHTML=ls.length?`<h2 style="margin:14px 0 8px">En tienda (${ls.length} ${ls.length===1?'lote':'lotes'})</h2>`+ls.map(l=>{const s=status(l);return `<div class="lot2" style="--c:${ST[s][1]}">
+    <div class="head" style="margin:0"><span class="st">${leftTxt(l.exp)}</span><span class="small">${l.qty} ${l.qty===1?'unidad':'unidades'}${l.lot?' · lote '+esc(l.lot):''}</span></div>
+    <div class="dates"><div><span>Comprado</span><strong>${fnum(l.bought)}</strong></div><div><span>Caduca</span><strong>${fnum(l.exp)}</strong></div><div><span>Estado</span><strong style="color:${ST[s][1]}">${ST[s][0].replace(/s$/,'')}</strong></div></div>
+    ${l.note?`<div class="small">${esc(l.note)}</div>`:''}
+    <div class="btns" style="margin-top:6px"><button data-sold="${esc(l.id)}">${l.qty>1?'Vendida 1':'Vendido'}</button><button data-ret="${esc(l.id)}">Retirar</button><button class="ghost" data-edit="${esc(l.id)}">Editar</button><a class="cal" href="${calUrl(l)}" target="_blank" rel="noopener">Aviso en calendario</a></div></div>`}).join('')
+    :(cur.pid?'<div class="empty">No queda ningún lote activo de este producto.</div>':'');
+}
+$('#rlots').onclick=e=>{
+  const s=e.target.closest('[data-sold]'),r=e.target.closest('[data-ret]'),ed=e.target.closest('[data-edit]');
+  if(s){const id=s.dataset.sold,old=items.get(id);
+    if(old.qty>1){put(id,{...old,qty:old.qty-1});toast(old.qty-1===1?'Queda 1 unidad':`Quedan ${old.qty-1} unidades`,()=>put(id,old))}
+    else{put(id,{...old,out:{t:'vendido',d:today()}});toast('Lote marcado como vendido',()=>put(id,old))}}
+  if(r){const id=r.dataset.ret,old=items.get(id);put(id,{...old,out:{t:'retirado',d:today()}});toast('Lote retirado',()=>put(id,old))}
+  if(ed){const l=items.get(ed.dataset.edit);editing=ed.dataset.edit;$('#fb').value=l.bought;$('#fe').value=l.exp;$('#fq').value=l.qty;$('#fl').value=l.lot||'';$('#fn').value=l.note||'';$('#ftitle').textContent='Editar lote';$('#fsub').textContent='Guardar cambios';$('#fcancel').hidden=false;$('#form').scrollIntoView({behavior:'smooth',block:'center'})}
+};
+function endEdit(){editing=null;$('#ftitle').textContent='Añadir lote';$('#fsub').textContent='Guardar lote';$('#fcancel').hidden=true;$('#fb').value=today();$('#fe').value='';$('#fq').value=1;$('#fl').value='';$('#fn').value=''}
+$('#fcancel').onclick=endEdit;
+$('#quick').onclick=e=>{const b=e.target.closest('[data-m]');if(b)$('#fe').value=addMonths($('#fb').value||today(),+b.dataset.m)};
+$('#form').onsubmit=e=>{
+  e.preventDefault();if(!cur)return;
+  const name=$('#rname').value.trim().slice(0,80);
+  if(!name){toast('Escribe el nombre del producto');$('#rname').focus();return}
+  const exp=$('#fe').value,bought=$('#fb').value||today(),qty=Math.max(1,Math.round(+$('#fq').value||1));
+  if(!exp){toast('Indica la fecha de caducidad');$('#fe').focus();return}
+  if(!cur.pid)cur.pid='p_'+uid();
+  put(cur.pid,{...(items.get(cur.pid)||{}),k:'p',code:cur.code,name},true);
+  for(const l of active())if(l.pid===cur.pid&&l.name!==name){const{id,...r}=l;put(id,{...r,name},true)}
+  const base=editing?items.get(editing):{k:'l',at:Date.now()};
+  put(editing||'l_'+uid(),{...base,pid:cur.pid,code:cur.code,name,bought,exp,qty,lot:$('#fl').value.trim().slice(0,30),note:$('#fn').value.trim().slice(0,80)});
+  toast(editing?'Cambios guardados':'Lote guardado · '+leftTxt(exp).toLowerCase());
+  cur.name=name;endEdit();renderLots();
+};
+
+// ---------- Cámara ----------
+const video=$('#video'),cv=$('#cv');
+let stream=null,det=null,zx=null,loopOn=false,busy=false;
+function loadZX(){return new Promise((ok,ko)=>{if(window.ZXing)return ok();const s=document.createElement('script');s.src='zxing.min.js';s.onload=ok;s.onerror=ko;document.head.appendChild(s)})}
+async function startCam(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){$('#cammsg').textContent='Este navegador no permite usar la cámara. Escribe el código a mano.';return}
+  $('#cammsg').textContent='Abriendo la cámara…';
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false})}
+  catch(e){$('#cammsg').textContent='No se pudo abrir la cámara. Revisa el permiso de cámara de la app en los ajustes del móvil, o escribe el código a mano.';return}
+  video.srcObject=stream;video.hidden=false;$('#aim').hidden=false;$('#cammsg').hidden=true;
+  try{await video.play()}catch(e){}
+  $('#camBtn').textContent='Cerrar cámara';
+  const tr=stream.getVideoTracks()[0],cap=tr.getCapabilities?tr.getCapabilities():{};$('#torch').hidden=!cap.torch;
+  det=null;
+  if('BarcodeDetector' in window){try{const sup=await BarcodeDetector.getSupportedFormats();const want=['ean_13','ean_8','upc_a','upc_e','code_128','code_39','data_matrix','qr_code','itf'].filter(f=>sup.includes(f));if(want.length)det=new BarcodeDetector({formats:want})}catch(e){}}
+  if(!det&&!zx){try{await loadZX();const Z=window.ZXing,h=new Map();h.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.EAN_13,Z.BarcodeFormat.EAN_8,Z.BarcodeFormat.UPC_A,Z.BarcodeFormat.UPC_E,Z.BarcodeFormat.CODE_128,Z.BarcodeFormat.CODE_39,Z.BarcodeFormat.ITF,Z.BarcodeFormat.DATA_MATRIX,Z.BarcodeFormat.QR_CODE]);h.set(Z.DecodeHintType.TRY_HARDER,true);zx=new Z.MultiFormatReader();zx.setHints(h)}catch(e){stopCam();$('#cammsg').textContent='No se pudo cargar el lector. Escribe el código a mano.';return}}
+  loopOn=true;tick();
+}
+function stopCam(){loopOn=false;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;video.hidden=true;$('#aim').hidden=true;$('#cammsg').hidden=false;$('#cammsg').textContent='Apunta al código de barras del producto.';$('#camBtn').textContent='Abrir cámara';$('#torch').hidden=true}
+async function tick(){
+  if(!loopOn)return;
+  if(!busy&&video.readyState>=2){
+    busy=true;let raw=null;
+    try{
+      if(det){const r=await det.detect(video);if(r.length)raw=r[0].rawValue}
+      else{const vw=video.videoWidth,vh=video.videoHeight,w=Math.min(960,vw),h=Math.round(vh*w/vw);cv.width=w;cv.height=h;const x=cv.getContext('2d',{willReadFrequently:true});x.drawImage(video,0,0,w,h);
+        const Z=window.ZXing;try{raw=zx.decodeWithState(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv)))).getText()}catch(e){}}
+    }catch(e){}
+    busy=false;
+    if(raw){try{navigator.vibrate&&navigator.vibrate(80)}catch(e){}handleCode(raw);return}
+  }
+  setTimeout(()=>requestAnimationFrame(tick),120);
+}
+$('#camBtn').onclick=()=>stream?stopCam():startCam();
+$('#torch').onclick=async()=>{try{const t=stream.getVideoTracks()[0],on=!t.getSettings().torch;await t.applyConstraints({advanced:[{torch:on}]})}catch(e){}};
+$('#manual').onsubmit=e=>{e.preventDefault();const v=$('#mcode').value.trim();if(!v)return;handleCode(v);$('#mcode').value=''};
+$('#again').onclick=()=>{$('#result').hidden=true;cur=null;window.scrollTo(0,0);startCam()};
+$('#nocode').onclick=()=>openProduct({code:''});
+
+// GS1: códigos de proveedor que sí llevan caducidad y lote
+function gsDate(s){if(!/^\d{6}$/.test(s))return '';let y=2000+ +s.slice(0,2),m=+s.slice(2,4),d=+s.slice(4,6);if(!m||m>12)return '';if(!d)d=new Date(y,m,0).getDate();return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
+function parseGS1(raw){
+  let s=String(raw).replace(/^\][A-Za-z]\d/,'');const out={};
+  if(/^\(\d{2,4}\)/.test(s)){for(const m of s.matchAll(/\((\d{2,4})\)([^(]+)/g))out[m[1]]=m[2].trim()}
+  else{if(s[0]==='\x1d')s=s.slice(1);const fix={'00':18,'01':14,'02':14,'11':6,'12':6,'13':6,'15':6,'16':6,'17':6};let i=0,g=0;
+    while(i<s.length&&g++<12){const a=s.slice(i,i+2);
+      if(fix[a]){out[a]=s.slice(i+2,i+2+fix[a]);i+=2+fix[a]}
+      else if(/^31\d|^32\d|^33\d|^34\d|^35\d|^36\d/.test(s.slice(i,i+3))){i+=4+6}
+      else if(a==='10'||a==='21'||a==='30'||a==='37'){let j=s.indexOf('\x1d',i+2);if(j<0)j=s.length;out[a]=s.slice(i+2,j);i=j+1}
+      else break}}
+  if(!out['01'])return null;
+  return{gtin:out['01'],exp:gsDate(out['17']||''),best:gsDate(out['15']||''),lot:(out['10']||'').slice(0,30)};
+}
+function handleCode(raw){
+  const g=parseGS1(raw);
+  if(g){openProduct({code:key(g.gtin),gs1:g});if(g.exp||g.best)toast('Etiqueta GS1: caducidad'+(g.lot?' y lote':'')+' leídos');return}
+  openProduct({code:key(raw)});
+}
+
+// ---------- Ajustes ----------
+function renderSettings(){
+  const c=cfg();$('#sbiz').value=c.biz||'';$('#swarn').value=c.warn;$('#ssoon').value=c.soon;
+  const l=lsGet(BK);$('#baklast').textContent=l?'Última copia: '+fdate(l.slice(0,10))+'.':'Aún no has descargado ninguna copia. Guárdala en Drive o envíatela por correo de vez en cuando.';
+  const lim=dnum(today())-90,hs=lots().filter(l=>l.out&&dnum(l.out.d)>=lim).sort((a,b)=>b.out.d.localeCompare(a.out.d));
+  $('#hist').innerHTML=hs.length?hs.map(l=>`<div class="lote" style="--c:${l.out.t==='retirado'?'var(--cad)':'var(--ok)'}"><div class="s"></div><div><b>${esc(l.name)}</b><div class="small">${l.out.t==='retirado'?'Retirado':'Vendido'} el ${fdate(l.out.d)} · caducaba ${fdate(l.exp)}</div></div><button class="ghost" data-back="${esc(l.id)}">Recuperar</button></div>`).join(''):'<div class="empty">Nada todavía.</div>';
+}
+$('#hist').onclick=e=>{const b=e.target.closest('[data-back]');if(!b)return;const{out,...r}=items.get(b.dataset.back);put(b.dataset.back,r);renderSettings();toast('Lote recuperado')};
+$('#ssave').onclick=()=>{const w=Math.max(1,Math.round(+$('#swarn').value||7)),s=Math.max(w+1,Math.round(+$('#ssoon').value||60));put('cfg',{...cfg(),biz:$('#sbiz').value.trim().slice(0,40),warn:w,soon:s});renderSettings();toast('Ajustes guardados')};
+$('#bak').onclick=()=>{download('caducidades-copia-'+today()+'.json',JSON.stringify({app:'caducidades',v:1,fecha:new Date().toISOString(),items:Object.fromEntries(items)}),'application/json');lsSet(BK,new Date().toISOString());renderSettings();toast('Copia descargada en Descargas')};
+$('#resbtn').onclick=()=>$('#respanel').classList.toggle('on');
+let fileText='';$('#resfile').onchange=async e=>{const f=e.target.files[0];fileText=f?await f.text():''};
+$('#resok').onclick=()=>{let o;try{o=JSON.parse(fileText)}catch(e){toast('Ese archivo no es una copia válida');return}
+  o=o&&o.items;if(!o||typeof o!=='object'){toast('Ese archivo no es una copia de esta app');return}
+  const ok=Object.entries(o).filter(([,v])=>v&&(v.k==='cfg'||v.k==='p'&&typeof v.name==='string'||v.k==='l'&&typeof v.exp==='string'&&/^\d{4}-\d\d-\d\d$/.test(v.exp)));
+  if(!ok.length){toast('La copia está vacía');return}
+  items.clear();for(const[k,v]of ok)items.set(k,v);save();fileText='';$('#resfile').value='';$('#respanel').classList.remove('on');render();renderSettings();toast('Copia restaurada')};
+$('#csv').onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const rows=[['producto','codigo','lote','cantidad','fecha_compra','caducidad','dias_restantes','estado','nota']].concat(active().sort((a,b)=>a.exp.localeCompare(b.exp)).map(l=>[l.name,l.code,l.lot,l.qty,l.bought,l.exp,left(l.exp),ST[status(l)][0],l.note]));
+  download('caducidades-'+today()+'.csv','﻿'+rows.map(r=>r.map(q).join(';')).join('\n'),'text/csv');toast('Lista descargada')};
+$('#sample').onclick=()=>{
+  const t=today(),S=[['2000000000015','Infusión de manzanilla 20 bolsitas',-3,6,'L2401'],['2000000000022','Miel de flores 500 g',0,2,''],['2000000000039','Cápsulas de magnesio 60 uds',5,3,'MG88'],['2000000000046','Aceite de árbol de té 15 ml',12,4,''],['2000000000053','Bebida de avena eco 1 L',25,8,'AV310'],['2000000000060','Espirulina en polvo 200 g',95,2,''],['2000000000077','Jalea real fresca 20 g',2,1,'JR5'],['','Hierba luisa a granel',40,1,''],['2000000000084','Champú de ortiga 250 ml',300,5,'']];
+  for(const[code,name,d,qty,lot] of S){const pid='p_'+uid();put(pid,{k:'p',code,name},true);const exp=iso(new Date(Date.now()+d*864e5));put('l_'+uid(),{k:'l',pid,code,name,qty,lot,bought:addMonths(t,-2),exp,note:'',at:Date.now()},true)}
+  render();showTab('lista');toast('Datos de ejemplo cargados');
+};
+$('#wipe').onclick=()=>{if(!wipeArm){wipeArm=true;$('#wipe').textContent='¿Seguro? Pulsa otra vez';setTimeout(()=>{wipeArm=false;$('#wipe').textContent='Borrar todos los datos'},4000);return}
+  wipeArm=false;$('#wipe').textContent='Borrar todos los datos';const old=Object.fromEntries(items);items.clear();save();render();renderSettings();toast('Todo borrado',()=>{for(const k in old)items.set(k,old[k]);save();render();renderSettings()})};
+
+// ---------- Navegación ----------
+const TABS=['lista','escanear','ajustes'];
+function showTab(t,keep){if(!TABS.includes(t))t='lista';
+  if(t!=='escanear')stopCam();
+  $$('[data-sec]').forEach(s=>s.classList.toggle('on',s.dataset.sec===t));
+  $$('.tabs button').forEach(b=>b.dataset.tab===t?b.setAttribute('aria-current','page'):b.removeAttribute('aria-current'));
+  try{history.replaceState(null,'','#'+t)}catch(e){}
+  if(t==='ajustes')renderSettings();
+  if(t==='escanear'&&!keep){$('#result').hidden=true;cur=null}
+  if(!keep)window.scrollTo(0,0);
+}
+$$('.tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+document.addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g){showTab(g.dataset.go);if(g.dataset.go==='escanear')startCam()}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCam();else render()});
+function render(){renderList();renderLots();try{const n=active().filter(l=>{const s=status(l);return s!=='ok'}).length;if(navigator.setAppBadge)n?navigator.setAppBadge(n):navigator.clearAppBadge()}catch(e){}}
+
+load();render();showTab((location.hash||'#lista').slice(1));
+{const n=active().filter(l=>status(l)!=='ok').length,m=cfg().soon;if(n)setTimeout(()=>toast(`Revisa ${n} ${n===1?'lote':'lotes'}: caducados o que caducan en ${m%30===0&&m>=60?m/30+' meses':m+' días'} o menos`),600)}
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
