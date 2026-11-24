@@ -18,6 +18,7 @@
    LAYOUT: tab bar at the bottom, one column on phones, big scan button. */
 :root{color-scheme:light dark;--bg:light-dark(#eef3ec,#0f1c14);--ink:light-dark(#16281d,#e3eee5);--card:light-dark(#ffffff,#18301f);--line:light-dark(#d3e0d4,#2a4532);--mute:light-dark(#57705e,#9db9a5);--cad:light-dark(#c8102e,#ff6b7d);--urg:light-dark(#d06200,#ffa64d);--pro:light-dark(#9a7a00,#e8c547);--ok:light-dark(#2f7d47,#6fd08f)}
 *{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter,system-ui,sans-serif;overflow-x:clip}
 h1,h2,.num{font-family:Archivo,Inter,sans-serif;font-stretch:112%}
 h1{font-size:21px;margin:0;font-weight:800}
@@ -125,7 +126,7 @@ label{font-size:13px;font-weight:600;color:var(--mute);display:grid;gap:4px}
           <div class="cam ocam" id="ocam"><video id="ocrvideo" playsinline muted></video><div class="aim2"></div></div>
           <p class="small" id="ocrmsg" style="margin:0"></p>
           <div class="btns" id="ocrres"></div>
-          <button type="button" id="ocrclose">Cerrar cámara</button>
+          <button type="button" id="ocrclose">Poner la fecha a mano</button>
         </div>
         <div class="row2">
           <label>Cantidad<input id="fq" type="number" min="1" inputmode="numeric" value="1"></label>
@@ -329,7 +330,7 @@ async function tick(){
         const Z=window.ZXing;try{raw=zx.decodeWithState(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv)))).getText()}catch(e){}}
     }catch(e){}
     busy=false;
-    if(raw){try{navigator.vibrate&&navigator.vibrate(80)}catch(e){}handleCode(raw);return}
+    if(raw){try{navigator.vibrate&&navigator.vibrate(80)}catch(e){}handleCode(raw,true);return}
   }
   setTimeout(()=>requestAnimationFrame(tick),120);
 }
@@ -353,10 +354,11 @@ function parseGS1(raw){
   if(!out['01'])return null;
   return{gtin:out['01'],exp:gsDate(out['17']||''),best:gsDate(out['15']||''),lot:(out['10']||'').slice(0,30)};
 }
-function handleCode(raw){
+function handleCode(raw,cam){
   const g=parseGS1(raw);
-  if(g){openProduct({code:key(g.gtin),gs1:g});if(g.exp||g.best)toast('Etiqueta GS1: caducidad'+(g.lot?' y lote':'')+' leídos');return}
-  openProduct({code:key(raw)});
+  if(g){openProduct({code:key(g.gtin),gs1:g});if(g.exp||g.best){toast('Etiqueta GS1: caducidad'+(g.lot?' y lote':'')+' leídos');return}}
+  else openProduct({code:key(raw)});
+  if(cam)setTimeout(()=>ocrOpen(true),350);
 }
 
 // ---------- Leer la fecha de caducidad con la cámara (OCR, sin internet) ----------
@@ -425,8 +427,8 @@ function prep(variant){
   }
   return ocrCv;
 }
-async function ocrOpen(){
-  stopCam();
+async function ocrOpen(after){
+  stopCam();if(after&&document.activeElement)document.activeElement.blur();
   $('#ocrbox').hidden=false;$('#ocrmsg').textContent='Preparando el lector… (la primera vez tarda unos segundos)';$('#ocrres').innerHTML='';ocrHits={};
   $('#ocrbox').scrollIntoView({behavior:'smooth',block:'center'});
   try{ocrStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false})}
@@ -435,7 +437,7 @@ async function ocrOpen(){
   try{const tr=ocrStream.getVideoTracks()[0],c=tr.getCapabilities?tr.getCapabilities():{};if(c.focusMode&&c.focusMode.includes('continuous'))await tr.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch(e){}
   try{await getWorker()}catch(e){$('#ocrmsg').textContent='No se pudo cargar el lector de texto. Escribe la fecha a mano.';return}
   if(!ocrStream)return;
-  $('#ocrmsg').textContent='Encuadra la fecha de caducidad dentro del recuadro, con buena luz y sin brillos.';
+  $('#ocrmsg').textContent=after?'Código leído. Ahora apunta a la FECHA DE CADUCIDAD y encuádrala en el recuadro.':'Encuadra la fecha de caducidad dentro del recuadro, con buena luz y sin brillos.';
   ocrOn=true;ocrTick();
 }
 function ocrClose(){ocrOn=false;if(ocrStream)ocrStream.getTracks().forEach(t=>t.stop());ocrStream=null;$('#ocrbox').hidden=true}
@@ -465,7 +467,7 @@ function ocrUse(iso,auto){
   toast((auto?'Fecha leída: ':'Fecha puesta: ')+fdate(iso)+'. Revisa que sea correcta.');
   $('#fe').scrollIntoView({behavior:'smooth',block:'center'});
 }
-$('#ocrbtn').onclick=ocrOpen;
+$('#ocrbtn').onclick=()=>ocrOpen(false);
 $('#ocrclose').onclick=ocrClose;
 $('#ocrres').onclick=e=>{const b=e.target.closest('[data-ocr]');if(b)ocrUse(b.dataset.ocr,false)};
 
