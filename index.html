@@ -57,6 +57,10 @@ label{font-size:13px;font-weight:600;color:var(--mute);display:grid;gap:4px}
 .cam .aim::after{content:"";position:absolute;left:6%;right:6%;top:50%;height:2px;background:var(--cad);animation:scan 1.6s ease-in-out infinite alternate}
 @keyframes scan{from{transform:translateY(-30px)}to{transform:translateY(30px)}}
 .cam .msg{position:relative;padding:20px;text-align:center;max-width:30ch}
+.ocrbox{display:grid;gap:8px;padding:12px;border-radius:14px;background:var(--bg)}
+.ocam{aspect-ratio:3/4;margin:0 auto;width:min(100%,46vh)}
+.ocam video{object-fit:contain}
+.aim2{position:absolute;left:8%;right:8%;top:36%;bottom:36%;border:3px solid #fff;border-radius:10px;box-shadow:0 0 0 999px #0007;pointer-events:none}
 .quick{display:flex;gap:6px;flex-wrap:wrap}
 .quick button{min-height:38px;padding:0 12px;font-size:14px}
 .prod{display:grid;gap:4px;margin-bottom:10px}
@@ -116,6 +120,13 @@ label{font-size:13px;font-weight:600;color:var(--mute);display:grid;gap:4px}
           <label>Caducidad<input id="fe" type="date" required></label>
         </div>
         <div class="quick" id="quick"><button type="button" data-m="1">+1 mes</button><button type="button" data-m="3">+3 meses</button><button type="button" data-m="6">+6 meses</button><button type="button" data-m="12">+1 año</button><button type="button" data-m="24">+2 años</button></div>
+        <button type="button" id="ocrbtn">Leer la fecha con la cámara</button>
+        <div class="ocrbox" id="ocrbox" hidden>
+          <div class="cam ocam" id="ocam"><video id="ocrvideo" playsinline muted></video><div class="aim2"></div></div>
+          <p class="small" id="ocrmsg" style="margin:0"></p>
+          <div class="btns" id="ocrres"></div>
+          <button type="button" id="ocrclose">Cerrar cámara</button>
+        </div>
         <div class="row2">
           <label>Cantidad<input id="fq" type="number" min="1" inputmode="numeric" value="1"></label>
           <label>Lote (opcional)<input id="fl" maxlength="30"></label>
@@ -271,7 +282,7 @@ $('#rlots').onclick=e=>{
   if(r){const id=r.dataset.ret,old=items.get(id);put(id,{...old,out:{t:'retirado',d:today()}});toast('Lote retirado',()=>put(id,old))}
   if(ed){const l=items.get(ed.dataset.edit);editing=ed.dataset.edit;$('#fb').value=l.bought;$('#fe').value=l.exp;$('#fq').value=l.qty;$('#fl').value=l.lot||'';$('#fn').value=l.note||'';$('#ftitle').textContent='Editar lote';$('#fsub').textContent='Guardar cambios';$('#fcancel').hidden=false;$('#form').scrollIntoView({behavior:'smooth',block:'center'})}
 };
-function endEdit(){editing=null;$('#ftitle').textContent='Añadir lote';$('#fsub').textContent='Guardar lote';$('#fcancel').hidden=true;$('#fb').value=today();$('#fe').value='';$('#fq').value=1;$('#fl').value='';$('#fn').value=''}
+function endEdit(){if(typeof ocrClose==='function'&&ocrOn)ocrClose();editing=null;$('#ftitle').textContent='Añadir lote';$('#fsub').textContent='Guardar lote';$('#fcancel').hidden=true;$('#fb').value=today();$('#fe').value='';$('#fq').value=1;$('#fl').value='';$('#fn').value=''}
 $('#fcancel').onclick=endEdit;
 $('#quick').onclick=e=>{const b=e.target.closest('[data-m]');if(b)$('#fe').value=addMonths($('#fb').value||today(),+b.dataset.m)};
 $('#form').onsubmit=e=>{
@@ -348,6 +359,119 @@ function handleCode(raw){
   openProduct({code:key(raw)});
 }
 
+// ---------- Leer la fecha de caducidad con la cámara (OCR, sin internet) ----------
+const MES={ENE:1,JAN:1,FEB:2,MAR:3,ABR:4,APR:4,AVR:4,MAY:5,MAI:5,JUN:6,JUL:7,AGO:8,AUG:8,SEP:9,SET:9,OCT:10,OKT:10,NOV:11,DIC:12,DEC:12,DEZ:12};
+const LABEL=/(CAD|EXP|CONS|PREF|BB|BBE|BEST|USE|VENC|ANTES|FIN|MHD|SCAD|VAL)/;
+function fixDigits(t){
+  // Corrige letras que el OCR confunde con números cuando están entre cifras
+  return t.toUpperCase().replace(/[“”"'`´]/g,'').replace(/(?<=[0-9])[OQ]|[OQ](?=[0-9])/g,'0')
+    .replace(/(?<=[0-9.\/\-])[IL|!](?=[0-9.\/\-])|(?<![A-Z])[IL|!](?=[0-9][.\/\-])/g,'1').replace(/(?<=[0-9])S(?=[0-9.\/\-])|(?<=[.\/\-])S(?=[0-9])/g,'5').replace(/(?<=[0-9])B(?=[0-9])/g,'8')
+    .replace(/\s*([.\/\-])\s*/g,'$1');
+}
+function mkDate(y,m,d){
+  y=+y;m=+m;if(y<100)y+=2000;
+  const nowY=new Date().getFullYear();
+  if(m<1||m>12||y<nowY-3||y>nowY+15)return null;
+  const last=new Date(y,m,0).getDate();
+  if(d==null)d=last;d=+d;if(d<1||d>last)return null;
+  return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+}
+function findDates(raw){
+  const t=fixDigits(raw),out=[];
+  const add=(iso,idx,kind)=>{if(!iso)return;const before=t.slice(Math.max(0,idx-14),idx);out.push({iso,lab:LABEL.test(before)?1:0,kind,idx})};
+  let m;
+  const re1=/(?<!\d)(\d{1,2})[.\/\-](\d{1,2})[.\/\-](\d{4}|\d{2})(?!\d)/g;          // 15/08/2027 · 15.08.27
+  while(m=re1.exec(t))add(mkDate(m[3],m[2],m[1]),m.index,'dmy');
+  const re2=/(?<!\d)(20\d{2})[.\/\-](\d{1,2})(?:[.\/\-](\d{1,2}))?(?!\d)/g;           // 2027-08-15 · 2027/08
+  while(m=re2.exec(t))add(mkDate(m[1],m[2],m[3]),m.index,'ymd');
+  const re3=/(?<![\d.\/\-])(\d{1,2})[.\/\-](\d{4}|\d{2})(?![\d.\/\-])/g;               // 08/2027 · 08/27
+  while(m=re3.exec(t))add(mkDate(m[2],m[1],null),m.index,'my');
+  const re4=/(?:(\d{1,2})[ .\/\-]?)?(ENE|JAN|FEB|MAR|ABR|APR|AVR|MAY|MAI|JUN|JUL|AGO|AUG|SEP|SET|OCT|OKT|NOV|DIC|DEC|DEZ)[A-Z]*[ .\/\-]?(\d{4}|\d{2})(?!\d)/g; // 15 AGO 2027 · AUG-27
+  while(m=re4.exec(t))add(mkDate(m[3],MES[m[2]],m[1]||null),m.index,'mon');
+  const re5=/(CAD|EXP|BB|BBE|CONS)[^0-9]{0,6}(\d{6}|\d{8})(?!\d)/g;                       // EXP 150827 · EXP 15082027
+  while(m=re5.exec(t)){const s=m[2];add(s.length===6?mkDate(s.slice(4),s.slice(2,4),s.slice(0,2)):mkDate(s.slice(4),s.slice(2,4),s.slice(0,2)),m.index+m[1].length,'compact')}
+  // Elimina duplicados y ordena: con etiqueta de caducidad primero, luego la fecha más lejana (las de fabricación suelen ser anteriores)
+  const seen=new Map();for(const d of out){const p=seen.get(d.iso);if(!p||d.lab>p.lab)seen.set(d.iso,d)}
+  return [...seen.values()].sort((a,b)=>b.lab-a.lab||b.iso.localeCompare(a.iso));
+}
+let ocrWorker=null,ocrReady=null,ocrStream=null,ocrOn=false,ocrBusy=false,ocrHits={},ocrFrame=0;
+const ocrVideo=$('#ocrvideo'),ocrCv=document.createElement('canvas');
+function loadScript(src){return new Promise((ok,ko)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=ko;document.head.appendChild(s)})}
+function getWorker(){
+  if(!ocrReady)ocrReady=(async()=>{
+    if(!window.Tesseract)await loadScript('tesseract.min.js');
+    const abs=p=>new URL(p,location.href).href;
+    const w=await Tesseract.createWorker('eng',1,{workerPath:abs('worker.min.js'),corePath:abs('tesseract-core-lstm.wasm.js'),langPath:abs('./'),gzip:true,workerBlobURL:false});
+    await w.setParameters({tessedit_pageseg_mode:'6',tessedit_char_whitelist:'0123456789/.-: ABCDEFGHIJKLMNOPQRSTUVWXYZ',preserve_interword_spaces:'1'});
+    ocrWorker=w;return w;
+  })().catch(e=>{ocrReady=null;throw e});
+  return ocrReady;
+}
+function prep(variant){
+  // Recorta la franja central (el recuadro), la amplía y mejora el contraste
+  const vw=ocrVideo.videoWidth,vh=ocrVideo.videoHeight;if(!vw)return null;
+  const sx=vw*.08,sw=vw*.84,sy=vh*.36,sh=vh*.28,W=1400,H=Math.round(W*sh/sw);
+  ocrCv.width=W;ocrCv.height=H;const x=ocrCv.getContext('2d',{willReadFrequently:true});
+  x.filter=['grayscale(1) contrast(1.4)','grayscale(1) contrast(1.6) blur(1.2px)','grayscale(1) contrast(1.4)','grayscale(1) blur(2.6px) contrast(1.8)','grayscale(1) blur(3.6px) contrast(2)'][variant];
+  x.drawImage(ocrVideo,sx,sy,sw,sh,0,0,W,H);x.filter='none';
+  if(variant>=2){ // blanco y negro (umbral de Otsu): ayuda con tinta tenue
+    const im=x.getImageData(0,0,W,H),d=im.data,hist=new Array(256).fill(0);
+    for(let i=0;i<d.length;i+=4)hist[d[i]]++;
+    let sum=0,sumB=0,wB=0,max=0,th=128;const tot=W*H;for(let i=0;i<256;i++)sum+=i*hist[i];
+    for(let i=0;i<256;i++){wB+=hist[i];if(!wB)continue;const wF=tot-wB;if(!wF)break;sumB+=i*hist[i];const mB=sumB/wB,mF=(sum-sumB)/wF,v=wB*wF*(mB-mF)**2;if(v>max){max=v;th=i}}
+    let dark=0;for(let i=0;i<d.length;i+=4){const v=d[i]>th?255:0;d[i]=d[i+1]=d[i+2]=v;if(!v)dark++}
+    if(dark>tot/2)for(let i=0;i<d.length;i+=4){const v=255-d[i];d[i]=d[i+1]=d[i+2]=v} // texto claro sobre fondo oscuro
+    x.putImageData(im,0,0);
+  }
+  return ocrCv;
+}
+async function ocrOpen(){
+  stopCam();
+  $('#ocrbox').hidden=false;$('#ocrmsg').textContent='Preparando el lector… (la primera vez tarda unos segundos)';$('#ocrres').innerHTML='';ocrHits={};
+  $('#ocrbox').scrollIntoView({behavior:'smooth',block:'center'});
+  try{ocrStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false})}
+  catch(e){$('#ocrmsg').textContent='No se pudo abrir la cámara. Revisa el permiso o escribe la fecha a mano.';return}
+  ocrVideo.srcObject=ocrStream;try{await ocrVideo.play()}catch(e){}
+  try{const tr=ocrStream.getVideoTracks()[0],c=tr.getCapabilities?tr.getCapabilities():{};if(c.focusMode&&c.focusMode.includes('continuous'))await tr.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch(e){}
+  try{await getWorker()}catch(e){$('#ocrmsg').textContent='No se pudo cargar el lector de texto. Escribe la fecha a mano.';return}
+  if(!ocrStream)return;
+  $('#ocrmsg').textContent='Encuadra la fecha de caducidad dentro del recuadro, con buena luz y sin brillos.';
+  ocrOn=true;ocrTick();
+}
+function ocrClose(){ocrOn=false;if(ocrStream)ocrStream.getTracks().forEach(t=>t.stop());ocrStream=null;$('#ocrbox').hidden=true}
+async function ocrTick(){
+  if(!ocrOn)return;
+  if(!ocrBusy&&ocrVideo.readyState>=2){
+    ocrBusy=true;
+    try{
+      const cv=prep(ocrFrame++%5);
+      if(cv){const {data}=await ocrWorker.recognize(cv);
+        const ds=findDates(data.text);
+        if(ds.length){
+          for(const d of ds)ocrHits[d.iso]=(ocrHits[d.iso]||0)+1+d.lab;
+          const best=Object.entries(ocrHits).sort((a,b)=>b[1]-a[1])[0];
+          showOcr(ds.map(d=>d.iso));
+          if(best[1]>=3){ocrUse(best[0],true);ocrBusy=false;return}
+        }
+      }
+    }catch(e){}
+    ocrBusy=false;
+  }
+  if(ocrOn)setTimeout(ocrTick,150);
+}
+function showOcr(list){$('#ocrres').innerHTML='<span class="small">Fechas vistas:</span> '+[...new Set(list)].slice(0,4).map(i=>`<button type="button" data-ocr="${i}">${fnum(i)}</button>`).join('')}
+function ocrUse(iso,auto){
+  $('#fe').value=iso;ocrClose();
+  toast((auto?'Fecha leída: ':'Fecha puesta: ')+fdate(iso)+'. Revisa que sea correcta.');
+  $('#fe').scrollIntoView({behavior:'smooth',block:'center'});
+}
+$('#ocrbtn').onclick=ocrOpen;
+$('#ocrclose').onclick=ocrClose;
+$('#ocrres').onclick=e=>{const b=e.target.closest('[data-ocr]');if(b)ocrUse(b.dataset.ocr,false)};
+
+function sizeOcam(){const vw=ocrVideo.videoWidth,vh=ocrVideo.videoHeight;if(!vw)return;const r=vw/vh,box=$('#ocam');box.style.aspectRatio=vw+'/'+vh;box.style.width=Math.min(box.parentElement.clientWidth-24,window.innerHeight*.6*r)+'px'}
+ocrVideo.addEventListener('loadedmetadata',sizeOcam);window.addEventListener('resize',sizeOcam);
+
 // ---------- Ajustes ----------
 function renderSettings(){
   const c=cfg();$('#sbiz').value=c.biz||'';$('#swarn').value=c.warn;$('#ssoon').value=c.soon;
@@ -378,7 +502,7 @@ $('#wipe').onclick=()=>{if(!wipeArm){wipeArm=true;$('#wipe').textContent='¿Segu
 
 // ---------- Navegación ----------
 const TABS=['lista','escanear','ajustes'];
-function showTab(t,keep){if(!TABS.includes(t))t='lista';
+function showTab(t,keep){if(!TABS.includes(t))t='lista';ocrClose();
   if(t!=='escanear')stopCam();
   $$('[data-sec]').forEach(s=>s.classList.toggle('on',s.dataset.sec===t));
   $$('.tabs button').forEach(b=>b.dataset.tab===t?b.setAttribute('aria-current','page'):b.removeAttribute('aria-current'));
@@ -389,7 +513,7 @@ function showTab(t,keep){if(!TABS.includes(t))t='lista';
 }
 $$('.tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 document.addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g){showTab(g.dataset.go);if(g.dataset.go==='escanear')startCam()}});
-document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCam();else render()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){stopCam();ocrClose()}else render()});
 function render(){renderList();renderLots();try{const n=active().filter(l=>{const s=status(l);return s!=='ok'}).length;if(navigator.setAppBadge)n?navigator.setAppBadge(n):navigator.clearAppBadge()}catch(e){}}
 
 load();render();showTab((location.hash||'#lista').slice(1));
