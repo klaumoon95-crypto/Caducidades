@@ -61,7 +61,7 @@ label{font-size:13px;font-weight:600;color:var(--mute);display:grid;gap:4px}
 .ocrbox{display:grid;gap:8px;padding:12px;border-radius:14px;background:var(--bg)}
 .ocam{aspect-ratio:3/4;margin:0 auto;width:min(100%,46vh)}
 .ocam video{object-fit:contain}
-.aim2{position:absolute;left:8%;right:8%;top:36%;bottom:36%;border:3px solid #fff;border-radius:10px;box-shadow:0 0 0 999px #0007;pointer-events:none}
+.aim2{position:absolute;left:6%;right:6%;top:42%;bottom:42%;border:3px solid #fff;border-radius:10px;box-shadow:0 0 0 999px #0007;pointer-events:none}
 .quick{display:flex;gap:6px;flex-wrap:wrap}
 .quick button{min-height:38px;padding:0 12px;font-size:14px}
 .prod{display:grid;gap:4px;margin-bottom:10px}
@@ -112,7 +112,14 @@ label{font-size:13px;font-weight:600;color:var(--mute);display:grid;gap:4px}
     </section>
 
     <section class="card" id="result" hidden>
-      <div class="prod"><span class="code" id="rcode"></span><label>Nombre del producto<input id="rname" maxlength="80" placeholder="Ej.: Infusión de manzanilla 20 bolsitas"></label><span class="small" id="rlook"></span></div>
+      <div class="prod"><span class="code" id="rcode"></span><label>Nombre del producto<input id="rname" maxlength="80" placeholder="Ej.: Infusión de manzanilla 20 bolsitas"></label><span class="small" id="rlook"></span><button type="button" id="namebtn" style="margin-top:4px">Leer el nombre con la cámara</button></div>
+      <div class="ocrbox" id="ocrbox" hidden>
+        <strong id="ocrtitle"></strong>
+        <div class="cam ocam" id="ocam"><video id="ocrvideo" playsinline muted></video><div class="aim2" id="aim2"></div></div>
+        <p class="small" id="ocrmsg" style="margin:0"></p>
+        <div class="btns" id="ocrres"></div>
+        <button type="button" id="ocrclose">Poner la fecha a mano</button>
+      </div>
       <div id="rlots"></div>
       <h2 style="margin-top:16px" id="ftitle">Añadir lote</h2>
       <form class="form" id="form">
@@ -122,12 +129,6 @@ label{font-size:13px;font-weight:600;color:var(--mute);display:grid;gap:4px}
         </div>
         <div class="quick" id="quick"><button type="button" data-m="1">+1 mes</button><button type="button" data-m="3">+3 meses</button><button type="button" data-m="6">+6 meses</button><button type="button" data-m="12">+1 año</button><button type="button" data-m="24">+2 años</button></div>
         <button type="button" id="ocrbtn">Leer la fecha con la cámara</button>
-        <div class="ocrbox" id="ocrbox" hidden>
-          <div class="cam ocam" id="ocam"><video id="ocrvideo" playsinline muted></video><div class="aim2"></div></div>
-          <p class="small" id="ocrmsg" style="margin:0"></p>
-          <div class="btns" id="ocrres"></div>
-          <button type="button" id="ocrclose">Poner la fecha a mano</button>
-        </div>
         <div class="row2">
           <label>Cantidad<input id="fq" type="number" min="1" inputmode="numeric" value="1"></label>
           <label>Lote (opcional)<input id="fl" maxlength="30"></label>
@@ -152,6 +153,12 @@ label{font-size:13px;font-weight:600;color:var(--mute);display:grid;gap:4px}
         <p class="small" style="margin:0">Por defecto: urgente a 7 días y aviso a 60 días (2 meses).</p>
         <div><button class="pri" id="ssave">Guardar ajustes</button></div>
       </div>
+    </section>
+    <section class="card">
+      <h2>Productos guardados <span class="small" id="pcount"></span></h2>
+      <p class="small" style="margin-top:-6px">Cada producto queda guardado con su código de barras: al escanearlo otra vez, la app lo reconoce.</p>
+      <input id="pq" type="search" placeholder="Buscar por nombre o código" aria-label="Buscar producto" style="margin-bottom:6px">
+      <div id="plist"></div>
     </section>
     <section class="card">
       <h2>Copia de seguridad</h2>
@@ -249,16 +256,29 @@ function openProduct({pid,code,gs1}){
   if(!p&&/^\d{8,14}$/.test(cur.code)&&navigator.onLine)lookup(cur.code);
   setTimeout(()=>{$('#result').scrollIntoView({behavior:'smooth',block:'start'});if(!cur.name)$('#rname').focus({preventScroll:true})},60);
 }
+function saveProd(){
+  if(!cur)return;const name=$('#rname').value.trim().slice(0,80);if(!name)return;
+  if(!cur.pid)cur.pid='p_'+uid();const old=items.get(cur.pid)||{};
+  if(old.name===name&&old.code===cur.code)return;
+  put(cur.pid,{...old,k:'p',code:cur.code,name,at:old.at||Date.now()},true);
+  for(const l of active())if(l.pid===cur.pid&&l.name!==name){const{id,...r}=l;put(id,{...r,name},true)}
+  cur.name=name;renderList(); // no se repinta el formulario: evita que los botones se muevan al tocar
+}
+$('#rname').addEventListener('change',()=>{nameAuto=false;saveProd()});
 async function lookup(code){
-  $('#rlook').textContent='Buscando el nombre en Open Food Facts…';
+  $('#rlook').textContent='Buscando el nombre en internet por el código de barras…';
   try{
     const ctl=new AbortController();setTimeout(()=>ctl.abort(),5000);
     const r=await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,product_name_es,brands,quantity`,{signal:ctl.signal});
     const j=await r.json(),p=j&&j.product;
     const nm=p&&(p.product_name_es||p.product_name);
-    if(nm&&cur&&cur.code===code&&!$('#rname').value.trim()){$('#rname').value=[nm,p.brands&&p.brands.split(',')[0],p.quantity].filter(Boolean).join(' · ').slice(0,80);$('#rlook').textContent='Nombre encontrado. Revísalo si hace falta.'}
-    else if(cur&&cur.code===code)$('#rlook').textContent='No lo he encontrado: escribe el nombre una vez y quedará guardado.';
-  }catch(e){if(cur&&cur.code===code)$('#rlook').textContent='Escribe el nombre una vez y quedará guardado.'}
+    if(nm&&cur&&cur.code===code&&(!$('#rname').value.trim()||nameAuto)){
+      $('#rname').value=[nm,p.brands&&p.brands.split(',')[0],p.quantity].filter(Boolean).join(' · ').slice(0,80);nameAuto=false;saveProd();
+      $('#rlook').textContent='Nombre encontrado en internet por el código de barras (Open Food Facts). Revísalo.';
+      if(ocrOn&&ocrMode==='name')ocrOpen('date',false,'Nombre encontrado. Ahora apunta a la FECHA DE CADUCIDAD: pon solo esa línea dentro del recuadro.');
+    }
+    else if(cur&&cur.code===code&&!$('#rname').value.trim())$('#rlook').textContent='No está en la base de datos de internet: léelo con la cámara o escríbelo una vez y quedará guardado.';
+  }catch(e){if(cur&&cur.code===code&&!$('#rname').value.trim())$('#rlook').textContent='Léelo con la cámara o escríbelo una vez y quedará guardado.'}
 }
 function calUrl(l){
   const c=cfg(),t=dnum(today()),wd=Math.max(t,dnum(l.exp)-c.soon),ymd=n=>new Date(n*864e5).toISOString().slice(0,10).replace(/-/g,'');
@@ -287,7 +307,7 @@ function endEdit(){if(typeof ocrClose==='function'&&ocrOn)ocrClose();editing=nul
 $('#fcancel').onclick=endEdit;
 $('#quick').onclick=e=>{const b=e.target.closest('[data-m]');if(b)$('#fe').value=addMonths($('#fb').value||today(),+b.dataset.m)};
 $('#form').onsubmit=e=>{
-  e.preventDefault();if(!cur)return;
+  e.preventDefault();if(!cur)return;if(ocrOn)ocrClose();
   const name=$('#rname').value.trim().slice(0,80);
   if(!name){toast('Escribe el nombre del producto');$('#rname').focus();return}
   const exp=$('#fe').value,bought=$('#fb').value||today(),qty=Math.max(1,Math.round(+$('#fq').value||1));
@@ -358,7 +378,7 @@ function handleCode(raw,cam){
   const g=parseGS1(raw);
   if(g){openProduct({code:key(g.gtin),gs1:g});if(g.exp||g.best){toast('Etiqueta GS1: caducidad'+(g.lot?' y lote':'')+' leídos');return}}
   else openProduct({code:key(raw)});
-  if(cam)setTimeout(()=>ocrOpen(true),350);
+  if(cam)setTimeout(()=>cur&&cur.name?ocrOpen('date',false,'Código leído. Ahora apunta a la FECHA DE CADUCIDAD: pon solo esa línea dentro del recuadro.'):ocrOpen('name',true,'Código leído. Apunta al NOMBRE grande de la caja y encuádralo en el recuadro.'),350);
 }
 
 // ---------- Leer la fecha de caducidad con la cámara (OCR, sin internet) ----------
@@ -388,6 +408,8 @@ function findDates(raw){
   while(m=re2.exec(t))add(mkDate(m[1],m[2],m[3]),m.index,'ymd');
   const re3=/(?<![\d.\/\-])(\d{1,2})[.\/\-](\d{4}|\d{2})(?![\d.\/\-])/g;               // 08/2027 · 08/27
   while(m=re3.exec(t))add(mkDate(m[2],m[1],null),m.index,'my');
+  const re3b=/(?<![\d.\/\-])(0[1-9]|1[0-2])[ 7](20[2-4]\d)(?!\d)/g;                              // 01 2029 · 0172029 (barra leída como 7)
+  while(m=re3b.exec(t))add(mkDate(m[2],m[1],null),m.index,'my');
   const re4=/(?:(\d{1,2})[ .\/\-]?)?(ENE|JAN|FEB|MAR|ABR|APR|AVR|MAY|MAI|JUN|JUL|AGO|AUG|SEP|SET|OCT|OKT|NOV|DIC|DEC|DEZ)[A-Z]*[ .\/\-]?(\d{4}|\d{2})(?!\d)/g; // 15 AGO 2027 · AUG-27
   while(m=re4.exec(t))add(mkDate(m[3],MES[m[2]],m[1]||null),m.index,'mon');
   const re5=/(CAD|EXP|BB|BBE|CONS)[^0-9]{0,6}(\d{6}|\d{8})(?!\d)/g;                       // EXP 150827 · EXP 15082027
@@ -396,23 +418,31 @@ function findDates(raw){
   const seen=new Map();for(const d of out){const p=seen.get(d.iso);if(!p||d.lab>p.lab)seen.set(d.iso,d)}
   return [...seen.values()].sort((a,b)=>b.lab-a.lab||b.iso.localeCompare(a.iso));
 }
-let ocrWorker=null,ocrReady=null,ocrStream=null,ocrOn=false,ocrBusy=false,ocrHits={},ocrFrame=0;
+let ocrWorker=null,ocrReady=null,nameWorker=null,nameReady=null,ocrStream=null,ocrOn=false,ocrBusy=false,ocrHits={},nameHits={},ocrFrame=0,ocrMode='date',ocrChain=false;
 const ocrVideo=$('#ocrvideo'),ocrCv=document.createElement('canvas');
 function loadScript(src){return new Promise((ok,ko)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=ko;document.head.appendChild(s)})}
+async function mkWorker(lang){
+  if(!window.Tesseract)await loadScript('tesseract.min.js');
+  const abs=p=>new URL(p,location.href).href;
+  return Tesseract.createWorker(lang,1,{workerPath:abs('worker.min.js'),corePath:abs('tesseract-core-lstm.wasm.js'),langPath:abs('./'),gzip:true,workerBlobURL:false});
+}
 function getWorker(){
-  if(!ocrReady)ocrReady=(async()=>{
-    if(!window.Tesseract)await loadScript('tesseract.min.js');
-    const abs=p=>new URL(p,location.href).href;
-    const w=await Tesseract.createWorker('eng',1,{workerPath:abs('worker.min.js'),corePath:abs('tesseract-core-lstm.wasm.js'),langPath:abs('./'),gzip:true,workerBlobURL:false});
+  if(!ocrReady)ocrReady=(async()=>{const w=await mkWorker('eng');
     await w.setParameters({tessedit_pageseg_mode:'6',tessedit_char_whitelist:'0123456789/.-: ABCDEFGHIJKLMNOPQRSTUVWXYZ',preserve_interword_spaces:'1'});
-    ocrWorker=w;return w;
-  })().catch(e=>{ocrReady=null;throw e});
+    ocrWorker=w;return w})().catch(e=>{ocrReady=null;throw e});
   return ocrReady;
 }
+function getNameWorker(){
+  if(!nameReady)nameReady=(async()=>{const w=await mkWorker('spa+eng');
+    await w.setParameters({tessedit_pageseg_mode:'11'});
+    nameWorker=w;return w})().catch(e=>{nameReady=null;throw e});
+  return nameReady;
+}
+const BAND={date:[.40,.20],name:[.22,.56]};
 function prep(variant){
-  // Recorta la franja central (el recuadro), la amplía y mejora el contraste
+  // Recorta la zona del recuadro, la amplía y mejora el contraste
   const vw=ocrVideo.videoWidth,vh=ocrVideo.videoHeight;if(!vw)return null;
-  const sx=vw*.08,sw=vw*.84,sy=vh*.36,sh=vh*.28,W=1400,H=Math.round(W*sh/sw);
+  const [t,h]=BAND[ocrMode],sx=vw*.06,sw=vw*.88,sy=vh*t,sh=vh*h,W=ocrMode==='name'?1100:1400,H=Math.round(W*sh/sw);
   ocrCv.width=W;ocrCv.height=H;const x=ocrCv.getContext('2d',{willReadFrequently:true});
   x.filter=['grayscale(1) contrast(1.4)','grayscale(1) contrast(1.6) blur(1.2px)','grayscale(1) contrast(1.4)','grayscale(1) blur(2.6px) contrast(1.8)','grayscale(1) blur(3.6px) contrast(2)'][variant];
   x.drawImage(ocrVideo,sx,sy,sw,sh,0,0,W,H);x.filter='none';
@@ -422,38 +452,86 @@ function prep(variant){
     let sum=0,sumB=0,wB=0,max=0,th=128;const tot=W*H;for(let i=0;i<256;i++)sum+=i*hist[i];
     for(let i=0;i<256;i++){wB+=hist[i];if(!wB)continue;const wF=tot-wB;if(!wF)break;sumB+=i*hist[i];const mB=sumB/wB,mF=(sum-sumB)/wF,v=wB*wF*(mB-mF)**2;if(v>max){max=v;th=i}}
     let dark=0;for(let i=0;i<d.length;i+=4){const v=d[i]>th?255:0;d[i]=d[i+1]=d[i+2]=v;if(!v)dark++}
-    if(dark>tot/2)for(let i=0;i<d.length;i+=4){const v=255-d[i];d[i]=d[i+1]=d[i+2]=v} // texto claro sobre fondo oscuro
+    if(dark>tot/2)for(let i=0;i<d.length;i+=4){const v=255-d[i];d[i]=d[i+1]=d[i+2]=v}
     x.putImageData(im,0,0);
   }
   return ocrCv;
 }
-async function ocrOpen(after){
-  stopCam();if(after&&document.activeElement)document.activeElement.blur();
-  $('#ocrbox').hidden=false;$('#ocrmsg').textContent='Preparando el lector… (la primera vez tarda unos segundos)';$('#ocrres').innerHTML='';ocrHits={};
-  $('#ocrbox').scrollIntoView({behavior:'smooth',block:'center'});
-  try{ocrStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false})}
-  catch(e){$('#ocrmsg').textContent='No se pudo abrir la cámara. Revisa el permiso o escribe la fecha a mano.';return}
-  ocrVideo.srcObject=ocrStream;try{await ocrVideo.play()}catch(e){}
-  try{const tr=ocrStream.getVideoTracks()[0],c=tr.getCapabilities?tr.getCapabilities():{};if(c.focusMode&&c.focusMode.includes('continuous'))await tr.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch(e){}
-  try{await getWorker()}catch(e){$('#ocrmsg').textContent='No se pudo cargar el lector de texto. Escribe la fecha a mano.';return}
-  if(!ocrStream)return;
-  $('#ocrmsg').textContent=after?'Código leído. Ahora apunta a la FECHA DE CADUCIDAD y encuádrala en el recuadro.':'Encuadra la fecha de caducidad dentro del recuadro, con buena luz y sin brillos.';
-  ocrOn=true;ocrTick();
+function setMode(m,msg){
+  ocrMode=m;ocrHits={};nameHits={};ocrFrame=0;$('#ocrres').innerHTML='';
+  const [t,h]=BAND[m],a=$('#aim2');a.style.top=t*100+'%';a.style.bottom=(100-(t+h)*100)+'%';
+  $('#ocrtitle').textContent=m==='name'?'Leyendo el NOMBRE del producto':'Leyendo la FECHA DE CADUCIDAD';
+  $('#ocrclose').textContent=m==='name'?'Escribir el nombre a mano':'Poner la fecha a mano';
+  $('#ocrmsg').textContent=msg||(m==='name'?'Apunta al nombre grande de la caja y encuádralo en el recuadro.':'Pon SOLO la línea de la fecha dentro del recuadro, con buena luz y sin brillos.');
 }
-function ocrClose(){ocrOn=false;if(ocrStream)ocrStream.getTracks().forEach(t=>t.stop());ocrStream=null;$('#ocrbox').hidden=true}
+async function ocrOpen(mode,chain,msg){
+  stopCam();if(document.activeElement)document.activeElement.blur();
+  ocrChain=!!chain;
+  $('#ocrbox').hidden=false;setMode(mode,'Preparando el lector… (la primera vez tarda unos segundos)');
+  $('#ocrbox').scrollIntoView({behavior:'smooth',block:'start'});
+  if(!ocrStream){
+    try{ocrStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false})}
+    catch(e){$('#ocrmsg').textContent='No se pudo abrir la cámara. Revisa el permiso o escríbelo a mano.';return}
+    ocrVideo.srcObject=ocrStream;try{await ocrVideo.play()}catch(e){}
+    try{const tr=ocrStream.getVideoTracks()[0],c=tr.getCapabilities?tr.getCapabilities():{};if(c.focusMode&&c.focusMode.includes('continuous'))await tr.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch(e){}
+  }
+  try{await (mode==='name'?getNameWorker():getWorker())}catch(e){$('#ocrmsg').textContent='No se pudo cargar el lector de texto. Escríbelo a mano.';return}
+  if(!ocrStream)return;
+  setMode(mode,msg);
+  if(!ocrOn){ocrOn=true;ocrTick()}
+}
+function ocrClose(){ocrOn=false;ocrChain=false;if(ocrStream)ocrStream.getTracks().forEach(t=>t.stop());ocrStream=null;$('#ocrbox').hidden=true}
+// ----- nombre: elige las líneas con letra más grande -----
+function tidyName(s){
+  s=s.replace(/[^\p{L}\p{N} '’.,%&+\-]/gu,' ').replace(/\s+/g,' ').trim();
+  if(s===s.toUpperCase()&&/\p{L}{3}/u.test(s))s=s.toLowerCase().replace(/(^|\s)(\p{L})/gu,(m,a,b)=>a+b.toUpperCase());
+  return s;
+}
+function nameLines(data){
+  const out=[];
+  for(const b of data.blocks||[])for(const p of b.paragraphs||[])for(const l of p.lines||[]){
+    const txt=tidyName(l.text||''),letters=(txt.match(/\p{L}/gu)||[]).length;
+    if(letters<3||letters/txt.replace(/\s/g,'').length<.6||(l.confidence||0)<55)continue;
+    out.push({txt,h:(l.bbox.y1-l.bbox.y0),y:l.bbox.y0});
+  }
+  out.sort((a,b)=>b.h-a.h);
+  return out;
+}
+async function nameStep(cv){
+  const {data}=await nameWorker.recognize(cv,{},{blocks:true});
+  const ls=nameLines(data);if(!ls.length)return;
+  const top=ls.slice(0,4),best=top[0];
+  for(const l of top){const k=l.txt.toLowerCase();nameHits[k]=nameHits[k]||{txt:l.txt,n:0,h:0};nameHits[k].n++;nameHits[k].h=Math.max(nameHits[k].h,l.h)}
+  const cands=Object.values(nameHits).sort((a,b)=>b.h*Math.min(b.n,3)-a.h*Math.min(a.n,3)).slice(0,5);
+  $('#ocrres').innerHTML='<span class="small">Toca el nombre correcto (puedes tocar dos para juntarlos):</span> '+cands.map(c=>`<button type="button" data-nm="${esc(c.txt)}">${esc(c.txt)}</button>`).join('');
+  if(!$('#rname').value.trim()||nameAuto){$('#rname').value=best.txt;nameAuto=true;$('#ocrmsg').textContent='Nombre puesto: «'+best.txt+'». Comprobando…'}
+  const k=best.txt.toLowerCase();if(nameHits[k]&&nameHits[k].n>=2)nameDone(nameHits[k].txt,true);
+}
+let nameAuto=false,nameTaps=[];
+function nameDone(txt,auto){
+  $('#rname').value=txt.slice(0,80);nameAuto=false;nameTaps=[];saveProd();
+  $('#rlook').textContent='Nombre leído con la cámara. Puedes corregirlo.';
+  if(ocrChain&&!$('#fe').value){toast('Nombre: '+txt);ocrOpen('date',false,'Ahora apunta a la FECHA DE CADUCIDAD: pon solo esa línea dentro del recuadro.')}
+  else{ocrClose();toast((auto?'Nombre leído: ':'Nombre puesto: ')+txt)}
+}
+// ----- bucle -----
 async function ocrTick(){
   if(!ocrOn)return;
   if(!ocrBusy&&ocrVideo.readyState>=2){
-    ocrBusy=true;
+    ocrBusy=true;const mode=ocrMode;
     try{
-      const cv=prep(ocrFrame++%5);
-      if(cv){const {data}=await ocrWorker.recognize(cv);
-        const ds=findDates(data.text);
-        if(ds.length){
-          for(const d of ds)ocrHits[d.iso]=(ocrHits[d.iso]||0)+1+d.lab;
-          const best=Object.entries(ocrHits).sort((a,b)=>b[1]-a[1])[0];
-          showOcr(ds.map(d=>d.iso));
-          if(best[1]>=3){ocrUse(best[0],true);ocrBusy=false;return}
+      if(mode==='name'){if(nameWorker){const cv=prep(0);if(cv)await nameStep(cv)}}
+      else if(ocrWorker){
+        const cv=prep(ocrFrame++%5);
+        if(cv){const {data}=await ocrWorker.recognize(cv);
+          const ds=findDates(data.text);
+          if(ds.length&&ocrMode==='date'){
+            for(const d of ds)ocrHits[d.iso]=(ocrHits[d.iso]||0)+1+d.lab;
+            const best=Object.entries(ocrHits).sort((a,b)=>b[1]-a[1])[0];
+            showOcr(ds.map(d=>d.iso));
+            if($('#fe').value!==best[0]){$('#fe').value=best[0];$('#ocrmsg').textContent='Fecha puesta: '+fdate(best[0])+'. Comprobando… (si es otra, toca la correcta abajo)'}
+            if(best[1]>=3){ocrUse(best[0],true);ocrBusy=false;return}
+          }
         }
       }
     }catch(e){}
@@ -461,21 +539,42 @@ async function ocrTick(){
   }
   if(ocrOn)setTimeout(ocrTick,150);
 }
-function showOcr(list){$('#ocrres').innerHTML='<span class="small">Fechas vistas:</span> '+[...new Set(list)].slice(0,4).map(i=>`<button type="button" data-ocr="${i}">${fnum(i)}</button>`).join('')}
+function showOcr(list){$('#ocrres').innerHTML='<span class="small">Toca la fecha correcta:</span> '+[...new Set(list)].slice(0,4).map(i=>`<button type="button" data-ocr="${i}">${fnum(i)}</button>`).join('')}
 function ocrUse(iso,auto){
   $('#fe').value=iso;ocrClose();
   toast((auto?'Fecha leída: ':'Fecha puesta: ')+fdate(iso)+'. Revisa que sea correcta.');
   $('#fe').scrollIntoView({behavior:'smooth',block:'center'});
 }
-$('#ocrbtn').onclick=()=>ocrOpen(false);
-$('#ocrclose').onclick=ocrClose;
-$('#ocrres').onclick=e=>{const b=e.target.closest('[data-ocr]');if(b)ocrUse(b.dataset.ocr,false)};
+$('#ocrbtn').onclick=()=>ocrOpen('date');
+$('#namebtn').onclick=()=>{nameAuto=false;ocrOpen('name')};
+$('#ocrclose').onclick=()=>{const m=ocrMode;ocrClose();(m==='name'?$('#rname'):$('#fe')).focus()};
+$('#ocrres').onclick=e=>{
+  const b=e.target.closest('[data-ocr]');if(b){ocrUse(b.dataset.ocr,false);return}
+  const n=e.target.closest('[data-nm]');if(!n)return;
+  nameAuto=false;nameTaps.push(n.dataset.nm);$('#rname').value=nameTaps.join(' ').slice(0,80);saveProd();
+  $('#ocrmsg').textContent='Nombre: «'+$('#rname').value+'». Toca otro para añadirlo, o «Listo».';
+  if(!$('#ocrdone'))$('#ocrres').insertAdjacentHTML('beforeend','<button type="button" class="pri" id="ocrdone">Listo</button>');
+};
+document.addEventListener('click',e=>{if(e.target.id==='ocrdone')nameDone($('#rname').value,false)});
+
 
 function sizeOcam(){const vw=ocrVideo.videoWidth,vh=ocrVideo.videoHeight;if(!vw)return;const r=vw/vh,box=$('#ocam');box.style.aspectRatio=vw+'/'+vh;box.style.width=Math.min(box.parentElement.clientWidth-24,window.innerHeight*.6*r)+'px'}
 ocrVideo.addEventListener('loadedmetadata',sizeOcam);window.addEventListener('resize',sizeOcam);
 
 // ---------- Ajustes ----------
-function renderSettings(){
+function renderProds(){
+  const q=($('#pq').value||'').trim().toLowerCase(),act=active(),ps=prods().sort((a,b)=>a.name.localeCompare(b.name,'es'));
+  $('#pcount').textContent='('+ps.length+')';
+  const xs=ps.filter(p=>!q||p.name.toLowerCase().includes(q)||String(p.code||'').includes(q));
+  $('#plist').innerHTML=xs.length?xs.map(p=>{const n=act.filter(l=>l.pid===p.id).length;return `<div class="lote" style="--c:var(--line)"><div class="s"></div><button class="n" data-prod="${esc(p.id)}"><b>${esc(p.name)}</b><span class="small" style="font-family:ui-monospace,monospace">${p.code?esc(p.code):'Sin código'} · ${n} ${n===1?'lote':'lotes'}</span></button>${n?'':`<button class="ghost" data-delp="${esc(p.id)}" aria-label="Borrar producto">Borrar</button>`}</div>`}).join('')
+    :`<div class="empty">${ps.length?'Ningún producto coincide.':'Aún no hay productos guardados.'}</div>`;
+}
+$('#pq').oninput=renderProds;
+$('#plist').onclick=e=>{
+  const o=e.target.closest('[data-prod]');if(o){openProduct({pid:o.dataset.prod});showTab('escanear',true);return}
+  const d=e.target.closest('[data-delp]');if(d){const id=d.dataset.delp,old=items.get(id);del(id);renderProds();toast('Producto borrado',()=>{put(id,old);renderProds()})}
+};
+function renderSettings(){renderProds();
   const c=cfg();$('#sbiz').value=c.biz||'';$('#swarn').value=c.warn;$('#ssoon').value=c.soon;
   const l=lsGet(BK);$('#baklast').textContent=l?'Última copia: '+fdate(l.slice(0,10))+'.':'Aún no has descargado ninguna copia. Guárdala en Drive o envíatela por correo de vez en cuando.';
   const lim=dnum(today())-90,hs=lots().filter(l=>l.out&&dnum(l.out.d)>=lim).sort((a,b)=>b.out.d.localeCompare(a.out.d));
